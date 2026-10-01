@@ -1,0 +1,71 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
+      - name: Install client dependencies
+        run: npm ci --prefix client
+
+      - name: Build frontend
+        run: npm run build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to OCI via SSH
+        uses: appleboy/ssh-action@v1.0.1
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            set -e
+            export APP_DIR="${{ secrets.APP_DIR }}"
+            export GIT_URL="https://github.com/prituhitsolutions/website.git"
+
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+
+            if [ -d .git ]; then
+              git fetch origin
+              git checkout main
+              git pull --ff-only origin main
+            else
+              git clone "$GIT_URL" "$APP_DIR"
+            fi
+
+            npm ci
+            npm ci --prefix server
+            npm ci --prefix client
+            npm run build
+
+            npm install -g pm2 >/dev/null 2>&1 || true
+            pm2 restart prituhit || pm2 start ecosystem.config.cjs --name prituhit
