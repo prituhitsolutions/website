@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/var/www/prituhit}"
+APP_DIR="${APP_DIR:-/home/ubuntu/prituhit}"
 GIT_URL="${GIT_URL:-https://github.com/prituhitsolutions/website.git}"
 
 mkdir -p "$APP_DIR"
@@ -15,12 +15,11 @@ else
   git clone "$GIT_URL" "$APP_DIR"
 fi
 
-npm ci
-npm ci --prefix server
-npm ci --prefix client
-npm run build
+if [ -f .env.example ] && [ ! -f .env ]; then
+  cp .env.example .env
+fi
 
-npm install -g pm2 >/dev/null 2>&1 || true
-pm2 restart prituhit || pm2 start ecosystem.config.cjs --name prituhit
+docker compose down --remove-orphans || true
+docker compose up -d --build --force-recreate
 
-echo "Deployment finished."
+echo "Deployment finished through Traefik Docker stack."

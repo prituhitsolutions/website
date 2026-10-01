@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  prituhit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prituhit
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_SSL: ${DATABASE_SSL:-true}
+      ADMIN_KEY: ${ADMIN_KEY}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN}
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prituhit.rule=Host(`${APP_HOST}`)"
+      - "traefik.http.routers.prituhit.entrypoints=websecure"
+      - "traefik.http.routers.prituhit.tls.certresolver=myresolver"
+      - "traefik.http.services.prituhit.loadbalancer.server.port=5000"
+
+networks:
+  traefik-public:
+    external: true

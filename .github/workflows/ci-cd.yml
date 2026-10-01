@@ -1,4 +1,4 @@
-name: CI/CD
+name: Deploy to OCI (Traefik)
 
 on:
   push:
@@ -19,16 +19,13 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install root dependencies
-        run: npm ci
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix server
+          npm ci --prefix client
 
-      - name: Install server dependencies
-        run: npm ci --prefix server
-
-      - name: Install client dependencies
-        run: npm ci --prefix client
-
-      - name: Build frontend
+      - name: Build app
         run: npm run build
 
   deploy:
@@ -37,9 +34,6 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Deploy to OCI via SSH
         uses: appleboy/ssh-action@v1.0.1
         with:
@@ -48,8 +42,8 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
             set -e
-            export APP_DIR="${{ secrets.APP_DIR }}"
-            export GIT_URL="https://github.com/prituhitsolutions/website.git"
+            APP_DIR="${{ secrets.APP_DIR }}"
+            REPO_URL="https://github.com/prituhitsolutions/website.git"
 
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
@@ -59,13 +53,17 @@ jobs:
               git checkout main
               git pull --ff-only origin main
             else
-              git clone "$GIT_URL" "$APP_DIR"
+              git clone "$REPO_URL" "$APP_DIR"
             fi
 
-            npm ci
-            npm ci --prefix server
-            npm ci --prefix client
-            npm run build
+            if [ -f .env.example ] && [ ! -f .env ]; then
+              cp .env.example .env
+            fi
 
-            npm install -g pm2 >/dev/null 2>&1 || true
-            pm2 restart prituhit || pm2 start ecosystem.config.cjs --name prituhit
+            if docker compose version >/dev/null 2>&1; then
+              docker compose down --remove-orphans || true
+              docker compose up -d --build --force-recreate
+            else
+              echo "Docker Compose is not installed on OCI VM"
+              exit 1
+            fi
